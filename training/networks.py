@@ -400,13 +400,12 @@ class SynthesisBlock(torch.nn.Module):
             self.num_conv += 1
 
         self.conv1 = SynthesisLayer(out_channels, out_channels, w_dim=w_dim, resolution=resolution,
-                                    conv_clamp=conv_clamp, channels_last=self.channels_last, return_xs_after_AdaIN = True, # TODO here
-                                    **layer_kwargs)
+                conv_clamp=conv_clamp, channels_last=self.channels_last, return_xs_after_AdaIN = True,
+                **layer_kwargs)
         self.num_conv += 1
 
         if is_last or architecture == 'skip':
-            self.torgb = ToRGBLayer(out_channels, img_channels, w_dim=w_dim,
-                                    conv_clamp=conv_clamp, channels_last=self.channels_last)
+            self.torgb = ToRGBLayer(out_channels, img_channels, w_dim=w_dim, conv_clamp=conv_clamp, channels_last=self.channels_last)
             self.num_torgb += 1
 
         if in_channels != 0 and architecture == 'resnet':
@@ -431,38 +430,35 @@ class SynthesisBlock(torch.nn.Module):
             x = x.to(dtype=dtype, memory_format=memory_format)
 
         # Main layers.
-
-        # TODO from these convs just as as X0 and X1 ... and output both ye
         if self.in_channels == 0:
             x, x0 = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
-            #x0 = x
-            
+
         elif self.architecture == 'resnet':
             y = self.skip(x, gain=np.sqrt(0.5))
-            #x0 = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
             x = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
-            #x = self.conv1(x0, next(w_iter), fused_modconv=fused_modconv, gain=np.sqrt(0.5), **layer_kwargs)
             x, x0 = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, gain=np.sqrt(0.5), **layer_kwargs)
             x = y.add_(x)
-            
+        
         else:
-            #x0 = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
-            #x = self.conv1(x0, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
             x = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
             x, x0 = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
 
         # ToRGB.
         if img is not None:
             misc.assert_shape(img, [None, self.img_channels, self.resolution // 2, self.resolution // 2])
+            
+            # get image
             img = upfirdn2d.upsample2d(img, self.resample_filter)
         if self.is_last or self.architecture == 'skip':
-            y = self.torgb(x, next(w_iter), fused_modconv=fused_modconv)
+            tmp_w = next(w_iter)
+            y = self.torgb(x, tmp_w, fused_modconv=fused_modconv)
             y = y.to(dtype=torch.float32, memory_format=torch.contiguous_format)
+
             img = img.add_(y) if img is not None else y
 
         assert x.dtype == dtype
         assert img is None or img.dtype == torch.float32
-        return x, img, x0
+        return x, x0, img 
 
 #----------------------------------------------------------------------------
 
@@ -487,17 +483,26 @@ class SynthesisNetwork(torch.nn.Module):
         channels_dict = {res: min(channel_base // res, channel_max) for res in self.block_resolutions}
         fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
 
-        #self.block_resolutions = [4, 8, 16, 32, 64, 128] # TODO 
-        #channels_dict = {4: 256, 8: 256, 16: 256, 32: 256, 64: 128, 128: 64} # TODO
-
         self.num_ws = 0
+
+        #self.block_resolutions = [4, 8, 16, 32, 64, 128] # 
+        #channels_dict = {4: 256, 8: 256, 16: 256, 32: 256, 64: 128, 128: 64} #
+        
+        print("Synthesis network:")
+        print("- Block resolutions:", self.block_resolutions)
+        print("- Channels dict:", channels_dict)
+        # go across all block resolutions and make the required blocks 
         for res in self.block_resolutions:
             in_channels = channels_dict[res // 2] if res > 4 else 0
             out_channels = channels_dict[res]
             use_fp16 = (res >= fp16_resolution)
             is_last = (res == self.img_resolution)
+
             block = SynthesisBlock(in_channels, out_channels, w_dim=w_dim, resolution=res,
-                img_channels=img_channels, is_last=is_last, use_fp16=use_fp16, **block_kwargs)
+                                img_channels=img_channels, is_last=is_last, 
+                                use_fp16=use_fp16, **block_kwargs)
+            
+            
             self.num_ws += block.num_conv
             if is_last:
                 self.num_ws += block.num_torgb
@@ -511,55 +516,31 @@ class SynthesisNetwork(torch.nn.Module):
         #print(ws.shape)
         with torch.autograd.profiler.record_function('split_ws'):
             misc.assert_shape(ws, [None, self.num_ws, self.w_dim])
+            
             ws = ws.to(torch.float32)
             w_idx = 0
 
-            
-            #print("Synthesis:")
+            # fill all block ws
             for res in self.block_resolutions:
-                #print("--- RESOLUTION:", res)
-                block = getattr(self, f'b{res}')
-                
-                #print("Ws shape:", ws.shape)
-                #print(w_idx, block.num_conv, block.num_torgb)
-                #print(block)
+                block = getattr(self, f'b{res}') # gets the block function 
                 block_ws.append(ws.narrow(1, w_idx, block.num_conv + block.num_torgb))
-
-                #print("--- Len Blocks: ", len(block_ws))
                 w_idx += block.num_conv
 
-        result_list = []
+        # go across all blocks and get images / masks 
         x = img = None
+        result_list = []
         x0 = None 
         if self.print_logs: print("All block WS", len(block_ws))
         if self.print_logs: print("Num layers:", len(self.block_resolutions))
-        #print("///" * 10)
+        
         for res, cur_ws in zip(self.block_resolutions, block_ws):
-            
-            #print("Block ResolutioN:", res)
-            #print("WS shape", cur_ws.shape)
             block = getattr(self, f'b{res}')
-            #print(cur_ws)
-            x, img, x0 = block(x, img, cur_ws, **block_kwargs)
-            #print(x.shape, x0.shape)
-            #print(img.shape)
-            # should both be  Size([1, 64, 256, 256])
-            #print(x)
+            x, x0, img = block(x, img, cur_ws, **block_kwargs)
 
-            x_tmp = x.cpu().detach().numpy()
-            x_tmp_0 = x0.cpu().detach().numpy()
-            img_tmp = img.cpu().detach().numpy()
             result_list.append(x)
             result_list.append(x0)
-            #result_list.append(x0)
             
 
-            #np.save("LATENT_IMAGES/" + str(res) + "_x.npy", x_tmp)
-            #np.save("LATENT_IMAGES/" + str(res) + "_x0.npy", x_tmp_0)
-            #np.save("LATENT_IMAGES/" + str(res) + "_img.npy", img_tmp)
-
-            if self.print_logs: print("=", end="")
-            #result_list.append(img) # TODO is img or x something? 
         return img, result_list
 
 #----------------------------------------------------------------------------
@@ -581,11 +562,15 @@ class Generator(torch.nn.Module):
         self.w_dim = w_dim
         self.img_resolution = img_resolution
         self.img_channels = img_channels
+
         self.synthesis = SynthesisNetwork(w_dim=w_dim, img_resolution=img_resolution, img_channels=img_channels, **synthesis_kwargs)
         self.num_ws = self.synthesis.num_ws
+        
         self.mapping = MappingNetwork(z_dim=z_dim, c_dim=c_dim, w_dim=w_dim, num_ws=self.num_ws, **mapping_kwargs)
 
     def forward(self, z, c=None, truncation_psi=1, truncation_cutoff=None, **synthesis_kwargs):
+        
+        # generate ws, from mapping network
         ws = self.mapping(z, c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
         img = self.synthesis(ws, **synthesis_kwargs)
         return img
@@ -768,7 +753,7 @@ class Discriminator(torch.nn.Module):
         img_channels,                   # Number of input color channels.
         architecture        = 'resnet', # Architecture: 'orig', 'skip', 'resnet'.
         channel_base        = 32768,    # Overall multiplier for the number of channels.
-        channel_max         = 256, # 512, TODO      # Maximum number of channels in any layer.
+        channel_max         = 512,      # Maximum number of channels in any layer.
         num_fp16_res        = 0,        # Use FP16 for the N highest resolutions.
         conv_clamp          = None,     # Clamp the output of convolution layers to +-X, None = disable clamping.
         cmap_dim            = None,     # Dimensionality of mapped conditioning label, None = default.
@@ -785,16 +770,22 @@ class Discriminator(torch.nn.Module):
         channels_dict = {res: min(channel_base // res, channel_max) for res in self.block_resolutions + [4]}
         
         #self.block_resolutions = [128, 64, 32, 16, 8]
-        # TODO channels_dict = {res: min(channel_base // res, channel_max) for res in self.block_resolutions + [4]}
+        # channels_dict = {res: min(channel_base // res, channel_max) for res in self.block_resolutions + [4]}
         #channels_dict = {128: 64, 64: 128, 32: 256, 16: 256, 8: 256, 4: 256} # {128: 128, 64: 256, 32: 512, 16: 512, 8: 512, 4: 512}
         
-
         fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
 
         if cmap_dim is None:
             cmap_dim = channels_dict[4]
         if c_dim == 0:
             cmap_dim = 0
+
+        print("Discriminator network: ")
+        print("- Channels dict ", channels_dict)
+        # {256: 64, 128: 128, 64: 256, 32: 512, 16: 512, 8: 512, 4: 512} 
+
+        print("- BLock resolutions:", self.block_resolutions)
+        # [256, 128, 64, 32, 16, 8] 
 
         common_kwargs = dict(img_channels=img_channels, architecture=architecture, conv_clamp=conv_clamp)
         cur_layer_idx = 0

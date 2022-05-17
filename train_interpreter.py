@@ -41,7 +41,6 @@ import gc
 
 import pickle
 from models.stylegan1 import G_mapping,Truncation,G_synthesis
-from models.stylegan2 import MappingNetwork, SynthesisNetwork
 
 import copy
 from numpy.random import choice
@@ -52,12 +51,11 @@ import torch.optim as optim
 import argparse
 import glob
 from torch.utils.data import Dataset, DataLoader
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:' + str(device_ids[0]) if torch.cuda.is_available() else 'cpu'
 print("Device:", device)
 import dnnlib
 from torch_utils import misc
 from training import legacy
-from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 
 #import cv2
 from PIL import Image
