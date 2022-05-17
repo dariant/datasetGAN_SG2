@@ -1,5 +1,9 @@
 
-# DatasetGAN
+# DatasetGAN updated for StyleGAN2
+
+Updated version of DatasetGAN ...
+
+
 
 This is the official code and data release for:
 
