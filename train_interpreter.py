@@ -62,6 +62,8 @@ from PIL import Image
 import imageio
 from tqdm import tqdm 
 
+from training.network_preparation import prepare_SG2
+
 class trainData(Dataset):
 
     def __init__(self, X_data, y_data):
@@ -204,7 +206,7 @@ def prepare_stylegan(args):
         print("---- Resolution:", resolution, " Layers:", max_layer)
 
         print("---- Get avg latent")
-        avg_latent = np.load(args['average_latent'])
+        avg_latent =  np.load(args['exp_dir'] + "/" + args['average_latent'])
         print("---- Latent to torch")
         avg_latent = torch.from_numpy(avg_latent).type(torch.FloatTensor).to(device)
 
@@ -256,7 +258,11 @@ def prepare_stylegan(args):
         for name, module in [('G', G)]:
             misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
+        
         ##########################################
+        print("Prepare StytleGAN2")
+        g_all, _, _ = prepare_SG2(resolution, path_to_pretrained, avg_latent, max_layer, gpus, device)
+        
 
         print("======")
         print(G.c_dim)
@@ -274,7 +280,7 @@ def prepare_stylegan(args):
         g_all.eval()
 
         print("---- Do parallel")
-        g_all = nn.DataParallel(g_all, device_ids=device_ids).cuda()
+        g_all = nn.DataParallel(g_all, device_ids=device_ids).to(device)
 
 
     else:
@@ -341,6 +347,7 @@ def generate_data(args, checkpoint_path, num_sample, start_step=0, vis=True, ign
         print('Experiment folder created at: %s' % (result_path))
 
 
+    classifier_path = os.path.join(checkpoint_path, "models")
     g_all, avg_latent, upsamplers = prepare_stylegan(args)
 
     classifier_list = []
@@ -349,10 +356,10 @@ def generate_data(args, checkpoint_path, num_sample, start_step=0, vis=True, ign
 
         classifier = pixel_classifier(numpy_class=args['number_class']
                                       , dim=args['dim'][-1])
-        classifier =  nn.DataParallel(classifier, device_ids=device_ids).cuda()
+        classifier =  nn.DataParallel(classifier, device_ids=device_ids).to(device)
 
         print(classifier)
-        path_to_model = os.path.join(checkpoint_path, 'model_' + str(MODEL_NUMBER) + '.pth')
+        path_to_model = os.path.join(classifier_path, 'model_' + str(MODEL_NUMBER) + '.pth')
         
         print(path_to_model)
         checkpoint = torch.load(path_to_model)
@@ -393,7 +400,7 @@ def generate_data(args, checkpoint_path, num_sample, start_step=0, vis=True, ign
 
             img, affine_layers = latent_to_image(g_all, upsamplers, latent, dim=args['dim'][1],
                                                      return_upsampled_layers=True, 
-                                                     ignore_latent_layers=ignore_latent_layers)
+                                                     ignore_latent_layers=ignore_latent_layers, dev=device)
 
             if args['dim'][0] != args['dim'][1]:
                 img = img[:, 64:448][0]
@@ -437,6 +444,7 @@ def generate_data(args, checkpoint_path, num_sample, start_step=0, vis=True, ign
 
                 img_seg_final = oht_to_scalar(img_seg)
                 img_seg_final = img_seg_final.reshape(args['dim'][0], args['dim'][1], 1)
+                
                 img_seg_final = img_seg_final.cpu().detach().numpy()
 
                 seg_mode_ensemble.append(img_seg_final)
@@ -499,8 +507,9 @@ def prepare_data(args, palette, ignore_latent_layers=None):
     print("-- Prepare stylegan")
     g_all, avg_latent, upsamplers = prepare_stylegan(args)
     print("-- Get latent info")
-    latent_all = np.load(args['annotation_image_latent_path'])
-    latent_all = torch.from_numpy(latent_all).cuda()
+    latent_all = np.load(args['exp_dir'] + "/" + args['annotation_image_latent_path'])
+    latent_all = torch.from_numpy(latent_all).to(device)#.cuda()
+    
     
     print("latent all:", latent_all.shape)
 
@@ -521,7 +530,7 @@ def prepare_data(args, palette, ignore_latent_layers=None):
             break
         name = 'image_mask%0d.npy' % i
 
-        im_frame = np.load(os.path.join( args['annotation_mask_path'] , name))
+        im_frame = np.load(os.path.join( args['exp_dir'], args['annotation_mask_path'] , name))
         mask = np.array(im_frame)
         # TODO 
         #mask =  cv2.resize(np.squeeze(mask), dsize=(args['dim'][1], args['dim'][0]), interpolation=cv2.INTER_NEAREST) 
@@ -531,7 +540,7 @@ def prepare_data(args, palette, ignore_latent_layers=None):
         mask = np.array(mask)
         mask_list.append(mask)
 
-        im_name = os.path.join( args['annotation_mask_path'], 'image_%d.jpg' % i)
+        im_name = os.path.join( args['exp_dir'], args['annotation_mask_path'], 'image_%d.jpg' % i)
         img = Image.open(im_name)
         img = img.resize((args['dim'][1], args['dim'][0]))
 
@@ -572,7 +581,7 @@ def prepare_data(args, palette, ignore_latent_layers=None):
         # while make training_data script uses different
         img, feature_maps = latent_to_image(g_all, upsamplers, latent_input.unsqueeze(0), dim=args['dim'][1],
                                             return_upsampled_layers=True, use_style_latents=args['annotation_data_from_w'],
-                                            ignore_latent_layers = ignore_latent_layers) # TODO ignore layers how many
+                                            ignore_latent_layers = ignore_latent_layers, dev=device) # TODO ignore layers how many
 
         print("Feature maps from (latent to image):", feature_maps.shape )
         #if args['dim'][0]  != args['dim'][1]:
@@ -659,6 +668,7 @@ def main(args, ignore_latent_layers=None):
 
     print(" *********************** Current dataloader length " +  str(len(train_loader)) + " ***********************")
 
+    os.makedirs(os.path.join(args['exp_dir'], 'models'))
     for MODEL_NUMBER in range(args['model_num']):
 
         gc.collect()
@@ -667,7 +677,7 @@ def main(args, ignore_latent_layers=None):
 
         classifier.init_weights()
 
-        classifier = nn.DataParallel(classifier, device_ids=device_ids).cuda()
+        classifier = nn.DataParallel(classifier, device_ids=device_ids).to(device)#.cuda()
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(classifier.parameters(), lr=0.001)
         classifier.train()
@@ -704,7 +714,7 @@ def main(args, ignore_latent_layers=None):
 
 
                 if iteration % 5000 == 0:
-                    model_path = os.path.join(args['exp_dir'],
+                    model_path = os.path.join(args['exp_dir'], 'models',
                                               'model_20parts_iter' +  str(iteration) + '_number_' + str(MODEL_NUMBER) + '.pth')
                     print('Save checkpoint, Epoch : ', str(epoch), ' Path: ', model_path)
 
@@ -727,8 +737,7 @@ def main(args, ignore_latent_layers=None):
                 break
 
         gc.collect()
-        model_path = os.path.join(args['exp_dir'],
-                                  'model_' + str(MODEL_NUMBER) + '.pth')
+        model_path = os.path.join(args['exp_dir'], 'models', 'model_' + str(MODEL_NUMBER) + '.pth')
         MODEL_NUMBER += 1
         print('save to:',model_path)
         torch.save({'model_state_dict': classifier.state_dict()},

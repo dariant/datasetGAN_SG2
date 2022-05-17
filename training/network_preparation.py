@@ -23,7 +23,7 @@ def prepare_SG2(resolution, path_to_pretrained, avg_latent, max_layer, gpus, dev
     D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator', block_kwargs=dnnlib.EasyDict(), mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
     G_kwargs.synthesis_kwargs.channel_base = D_kwargs.channel_base = int(spec.fmaps * 32768)
     G_kwargs.synthesis_kwargs.channel_max = D_kwargs.channel_max = 512
-    G_kwargs.mapping_kwargs.num_layers = 2#spec.map
+    G_kwargs.mapping_kwargs.num_layers = spec.map
     G_kwargs.synthesis_kwargs.num_fp16_res = D_kwargs.num_fp16_res = 4 # enable mixed-precision training
     G_kwargs.synthesis_kwargs.conv_clamp = D_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
     D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
