@@ -1,0 +1,9 @@
+#FROM tensorflow/tensorflow:1.15.5-gpu-py3
+
+FROM sg2ada:latest
+
+#RUN apt-get update
+#RUN apt-get install libsm6 libxext6  -y 
+#RUN apt-get install libgl1
+#RUN pip install opencv-python
+RUN  pip install opencv-python-headless
