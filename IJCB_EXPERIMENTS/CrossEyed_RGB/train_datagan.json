@@ -1,0 +1,21 @@
+{
+  "exp_dir": "IJCB_EXPERIMENTS/CrossEyed_RGB",
+  "batch_size": 64,
+  "category": "eyes_256",
+  "debug": false,
+  "dim": [256, 256, 4992], 
+  "deeplab_res": 256,
+  "number_class": 4, 
+  "testing_data_number_class": 4,
+  "max_training": 8,
+  "stylegan_ver": "2",
+  "annotation_data_from_w": false,
+  "annotation_mask_path": "eyes_processed",
+  "testing_path": "",
+  "average_latent": "avg_latent_stylegan.npy",
+  "annotation_image_latent_path": "latent_stylegan.npy",
+  "stylegan_checkpoint": "IJCB_EXPERIMENTS/checkpoints/CrossEyed_RGB_002480.pkl",
+  "model_num": 10,
+  "upsample_mode":"bilinear",
+  "upsample_threshold": "8"
+}

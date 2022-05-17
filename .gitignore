@@ -1,3 +1,5 @@
-IJCB_EXPERIMENTS
+IJCB_EXPERIMENTS/*
 checkpoints
 .cache
+
+!IJCB_EXPERIMENTS/CrossEyed_RGB
