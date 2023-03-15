@@ -37,7 +37,27 @@ Next, preprocess the annotations so that the classes are in the range `{0, 1, 2,
 | &ensp;&ensp;&ensp;&ensp;&boxvr;&nbsp; ... | ...
 
 
+## Citation
+This DatasetGAN version was implemented during the development of the [BiOcularGAN](https://github.com/dariant/BiOcularGAN) framework, as a proof of concept. The final version uses a Dual-branch StyleGAN2 approach to generate photorealistic bimodal images. 
+
+The paper is currently under review in IJCB 2022. To cite this work please use the below information.
+
+```
+@article{tomasevic2022bioculargan,
+  title={{BiOcularGAN: Bimodal Synthesis and Annotation of Ocular Images}},
+  author={Toma{\v{s}}evi{\'c}, Darian and Peer, Peter and {\v{S}}truc, Vitomir},
+  journal={arXiv preprint arXiv:2205.01536},
+  year={2022},
+  doi= {10.48550/arxiv.2205.01536},
+  publisher = {arXiv},
+}
+
+```
+
+
+
 For more details and instructions check the documentation of the original [DatasetGAN](https://github.com/nv-tlabs/datasetGAN_release) implementation provided below: 
+## 
 ## 
 
 # Original DatasetGAN
