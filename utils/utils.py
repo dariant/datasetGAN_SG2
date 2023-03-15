@@ -66,16 +66,11 @@ def latent_to_image(g_all, upsamplers, latents, return_upsampled_layers=False, u
         if print_log: print("NOT use_style_from_latents:")
         if print_log: print("-- do mapping, truncation, and continue")
         # generate style_latents from latents
-        #print(g_all)
-        #print("-- Latents shape:", latents.shape)
-        #print(g_all.module.g_mapping)
-        style_latents = g_all.module.g_mapping(latents)
-        #print("-- Style latents shape:", style_latents.shape) # should be Style latents shape: torch.Size([1, 18, 512]) but is 1, 14, 512
-
-        style_latents = g_all.module.truncation(style_latents)
-        #print("--", style_latents.shape)
+        style_latents = g_all.module.g_mapping(latents, c=None, truncation_psi=0.7, truncation_cutoff=7)
         
-        #style_latents = g_all.module.truncation(g_all.module.g_mapping(latents))
+        # Separate truncation of latents
+        #style_latents = g_all.module.truncation(style_latents)
+        
         style_latents = style_latents.clone()  # make different layers non-alias
 
     else:

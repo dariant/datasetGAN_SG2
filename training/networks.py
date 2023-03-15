@@ -432,16 +432,16 @@ class SynthesisBlock(torch.nn.Module):
         # Main layers.
         if self.in_channels == 0:
             x, x0 = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
-
         elif self.architecture == 'resnet':
             y = self.skip(x, gain=np.sqrt(0.5))
             x = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
             x, x0 = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, gain=np.sqrt(0.5), **layer_kwargs)
             x = y.add_(x)
-        
         else:
-            x = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
-            x, x0 = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+            x0 = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+            #x, x0 = self.conv1(x0, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+            # TODO inspect if editgan or datasetgan way is better
+            x, _ = self.conv1(x0, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
 
         # ToRGB.
         if img is not None:
@@ -488,9 +488,9 @@ class SynthesisNetwork(torch.nn.Module):
         #self.block_resolutions = [4, 8, 16, 32, 64, 128] # 
         #channels_dict = {4: 256, 8: 256, 16: 256, 32: 256, 64: 128, 128: 64} #
         
-        print("Synthesis network:")
-        print("- Block resolutions:", self.block_resolutions)
-        print("- Channels dict:", channels_dict)
+        #print("Synthesis network:")
+        #print("- Block resolutions:", self.block_resolutions)
+        #print("- Channels dict:", channels_dict)
         # go across all block resolutions and make the required blocks 
         for res in self.block_resolutions:
             in_channels = channels_dict[res // 2] if res > 4 else 0
@@ -537,9 +537,8 @@ class SynthesisNetwork(torch.nn.Module):
             block = getattr(self, f'b{res}')
             x, x0, img = block(x, img, cur_ws, **block_kwargs)
 
-            result_list.append(x)
             result_list.append(x0)
-            
+            result_list.append(x)
 
         return img, result_list
 

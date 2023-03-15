@@ -29,7 +29,7 @@ sys.path.append('..')
 
 import torch
 import torch.nn as nn
-torch.manual_seed(0)
+# torch.manual_seed(0)
 import scipy.misc
 import json
 from collections import OrderedDict
@@ -63,6 +63,7 @@ import imageio
 from tqdm import tqdm 
 
 from training.network_preparation import prepare_SG2
+
 
 class trainData(Dataset):
 
@@ -210,7 +211,7 @@ def prepare_stylegan(args):
         print("---- Latent to torch")
         avg_latent = torch.from_numpy(avg_latent).type(torch.FloatTensor).to(device)
 
-        print(avg_latent.shape)
+        print("AVG latent", avg_latent.shape)
         #avg_latent = torch.ones((14, 512)).type(torch.FloatTensor).to(device)
         print("----  Build Generator")
 
@@ -521,7 +522,7 @@ def prepare_data(args, palette, ignore_latent_layers=None):
     all_feature_maps_train = np.zeros((args['dim'][0] * args['dim'][1] * len(latent_all), args['dim'][2]), dtype=np.float16)
     all_mask_train = np.zeros((args['dim'][0] * args['dim'][1] * len(latent_all),), dtype=np.float16)
 
-    print("all_feature_maps TRAIN: ", all_feature_maps_train.shape)
+    #print("all_feature_maps TRAIN: ", all_feature_maps_train.shape)
 
     print("Show training examples")
     vis = []
@@ -531,7 +532,7 @@ def prepare_data(args, palette, ignore_latent_layers=None):
 
         latent_input = latent_all[i].float()
         
-        print("Latent input size:", latent_input.shape, latent_input.unsqueeze(0).shape)
+        #print("Latent input size:", latent_input.shape, latent_input.unsqueeze(0).shape)
 
         # TODO fmain difference here is that this uses retun_upsampled = True and use_style_latents ... 
         # while make training_data script uses different
@@ -539,7 +540,7 @@ def prepare_data(args, palette, ignore_latent_layers=None):
                                             return_upsampled_layers=True, use_style_latents=args['annotation_data_from_w'],
                                             ignore_latent_layers = ignore_latent_layers, dev=device) # TODO ignore layers how many
 
-        print("Feature maps from (latent to image):", feature_maps.shape )
+        #print("Feature maps from (latent to image):", feature_maps.shape )
         #if args['dim'][0]  != args['dim'][1]:
         #    print("DO THIS OR NOT?")
             # only for car
@@ -550,10 +551,10 @@ def prepare_data(args, palette, ignore_latent_layers=None):
         feature_maps = feature_maps.permute(0, 2, 3, 1)
 
         # Permute: torch.Size([1, 256, 256, 4992])
-        print("Permute:", feature_maps.shape)
+        #print("Permute:", feature_maps.shape)
 
         feature_maps = feature_maps.reshape(-1, args['dim'][2])
-        print("reshape:", feature_maps.shape)
+        print("Feature map:", feature_maps.shape)
         
 
         new_mask =  np.squeeze(mask)

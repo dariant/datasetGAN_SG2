@@ -28,7 +28,7 @@ sys.path.append('..')
 
 import torch
 import torch.nn as nn
-#torch.manual_seed(42)
+torch.manual_seed(0)
 import json
 from collections import OrderedDict
 import numpy as np
@@ -41,7 +41,7 @@ import copy
 from numpy.random import choice
 from utils.utils import latent_to_image, Interpolate
 import argparse
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:' + str(device_ids[0]) if torch.cuda.is_available() else 'cpu'
 
 from torch_utils import misc
 import dnnlib
@@ -52,7 +52,7 @@ from tqdm import tqdm
 
 def prepare_stylegan(args):
     ######################################################################################
-    if args['stylegan_ver'] == "1":
+    if args['stylegan_ver'] == "1" and False:
         if args['category'] == "car":
             resolution = 512
             max_layer = 8
@@ -133,7 +133,7 @@ def prepare_stylegan(args):
 
         if args['average_latent'] == '':
             avg_latent = g_all.module.g_mapping.make_mean_latent(8000, expand_to=args['expand_to_dimensions'], dev=device)
-            g_all.module.truncation.avg_latent = avg_latent
+            #g_all.module.truncation.avg_latent = avg_latent
 
 
     else:
@@ -189,7 +189,7 @@ def generate_data(args, num_sample, sv_path):
 
     image_folder = os.path.join(sv_path, "images_to_annotate")
     os.makedirs(image_folder, exist_ok=True)
-
+    
     with torch.no_grad():
         latent_cache = []
 
